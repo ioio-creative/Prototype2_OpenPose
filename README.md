@@ -6,7 +6,10 @@ To use this code with the OpenPose library, one has to build this code (a.k.a. u
 https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/doc/installation.md
 https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/examples/user_code/README.md
 
-This code imports the trained model data from OpenPose library, i.e. running the initialisation once, then repeartedly (in a while-true loop) read images (in order of create datetime) from INPUT directory, output the detected skeleton points from human body/bodies in a json text file (having the same name as the input image) in the OUTPUT directory. The input image read is then moved to the ARCHIVES directory. The process repeats indefinitely many times because it is in a while loop. The program will be running doing-nothing while-true loop when all the files in the INPUT directory are examined, until new images are added to the INPUT directory. That is, the program will not terminate automatically. 
+This code imports the trained model data from OpenPose library, i.e. running the initialisation once, then repeartedly (in a while-true loop) read images (in order of create datetime) from INPUT directory, output the detected skeleton points from human body/bodies in a json text file (having the same name as the input image) in the OUTPUT directory. The input image read is then moved to the ARCHIVES directory. The process repeats indefinitely many times because it is in a while loop. The program will be running doing-nothing while-true loop when all the files in the INPUT directory are examined, until new images are added to the INPUT directory. That is, the program will not terminate automatically.
+
+Skeleton points json output format:
+https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/doc/output.md
 
 The INPUT, OUTPUT and ARCHIVES directories are specified as command line arguments when starting the program.
 Usage: BUILT_EXE input output archives

@@ -77,6 +77,7 @@ std::string getFileNameFromPath(const std::string path);
 std::string getFileNameWithoutExtensionFromPath(const std::string path);
 std::string getDirectoryFromPath(const std::string path);
 std::string getEarliestCreatedFileNameInDirectory(const std::string& directoryName);
+std::string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const std::string outPath);
 int openPoseTutorialPose1(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath);
 
@@ -108,16 +109,17 @@ int main(int argc, char *argv[])
 std::string getFileNameFromPath(const std::string path)
 {
 	std::string fileName = path;
+	int pathStrLength = path.length();
 	const size_t last_slash_idx = path.rfind('\\');
 	if (std::string::npos != last_slash_idx)
 	{
-		if (path.length() > last_slash_idx)
+		if (pathStrLength > last_slash_idx)
 		{
 			fileName = path.substr(last_slash_idx + 1);
 		}
 		else
 		{
-			fileName = path.substr(0, path.length() - 1);
+			fileName = path.substr(0, pathStrLength - 1);
 		}
 	}
 	return fileName;
@@ -181,6 +183,50 @@ std::string getEarliestCreatedFileNameInDirectory(const std::string& directoryNa
 	return oldestFile;
 }
 
+std::string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
+{
+	std::string jsonResult = "{\"version\":1.2,\"people\":[";
+	const std::string delimiter = ",";
+	const int numOfPoseKeyPointsPerBody = 25;
+	int arrayLength = poseKeyPoints.getVolume();
+	for (int i = 0; i < arrayLength; i++)
+	{
+		int incrementI = (i + 1);
+
+		if (incrementI % numOfPoseKeyPointsPerBody == 1)
+		{
+			jsonResult += "{\"pose_keypoints_2d\":[";
+		}
+
+		jsonResult += std::to_string(poseKeyPoints[i]) + delimiter;
+
+		if (incrementI % numOfPoseKeyPointsPerBody == 0)
+		{
+			jsonResult = jsonResult.substr(0, jsonResult.length() - 1);
+			jsonResult += "],\"face_keypoints_2d\":[],";
+			jsonResult += "\"hand_left_keypoints_2d\" : [],";
+			jsonResult += "\"hand_right_keypoints_2d\" : [],";
+			jsonResult += "\"pose_keypoints_3d\" : [],";
+			jsonResult += "\"face_keypoints_3d\" : [],";
+			jsonResult += "\"hand_left_keypoints_3d\" : [],",
+			jsonResult += "\"hand_right_keypoints_3d\" : []},";
+		}
+
+		if (incrementI == arrayLength)
+		{
+
+		}
+	}
+
+	if (jsonResult != "")
+	{
+		jsonResult = jsonResult.substr(0, jsonResult.length() - 1);
+		jsonResult += "]}";
+	}
+
+	return jsonResult;
+}
+
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const std::string outPath)
 {
 	bool isError = false;
@@ -192,7 +238,7 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const std::string
 
 		if (myFile.is_open())
 		{
-			myFile << poseKeyPoints;
+			myFile << getJsonFromPoseKeyPoints(poseKeyPoints);
 		}
 		else
 		{
@@ -306,7 +352,7 @@ int openPoseTutorialPose1(const std::string inImgDirPath, const std::string outD
 				poseExtractorCaffe.forwardPass(netInputArray, imageSize, scaleInputToNetInputs);
 				const auto poseKeypoints = poseExtractorCaffe.getPoseKeypoints();
 				const std::string outputFileNameWithoutExtension = getFileNameWithoutExtensionFromPath(earliestInImgFullPath);
-				const std::string outputFileFullPath = outDirPath + "\\" + outputFileNameWithoutExtension + ".txt";
+				const std::string outputFileFullPath = outDirPath + "\\" + outputFileNameWithoutExtension + "_keypoints.json";
 				outputPoseKeypointsToJson(poseKeypoints, outputFileFullPath);
 #if _IsRenderImage
 				// Step 5 - Render poseKeypoints
