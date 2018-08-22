@@ -187,7 +187,7 @@ std::string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
 {
 	std::string jsonResult = "{\"version\":1.2,\"people\":[";
 	const std::string delimiter = ",";
-	const int numOfPoseKeyPointsPerBody = 25;
+	const int numOfPoseKeyPointsPerBody = 25 * 3;
 	int arrayLength = poseKeyPoints.getVolume();
 	for (int i = 0; i < arrayLength; i++)
 	{
@@ -239,6 +239,7 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const std::string
 		if (myFile.is_open())
 		{
 			myFile << getJsonFromPoseKeyPoints(poseKeyPoints);
+			//myFile << poseKeyPoints;
 		}
 		else
 		{
@@ -374,7 +375,8 @@ int openPoseTutorialPose1(const std::string inImgDirPath, const std::string outD
 				// Return successful message
 
 				// TODO: handle error
-				MoveFile(earliestInImgFullPath.c_str(), arhiveImgFullPath.c_str());
+				MoveFileEx(earliestInImgFullPath.c_str(), arhiveImgFullPath.c_str(),
+					MOVEFILE_REPLACE_EXISTING);
 			}
 			else
 			{
