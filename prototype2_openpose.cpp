@@ -317,71 +317,87 @@ int openPoseTutorialPose1(const std::string inImgDirPath, const std::string outD
 
 		while (true)
 		{
-			// get oldest image from input directory
-			std::string earliestInImgFileName = getEarliestCreatedFileNameInDirectory(inImgDirPath);
-			if (earliestInImgFileName != "")
+			try
 			{
-				const auto timerBegin = std::chrono::high_resolution_clock::now();
 
-				std::string earliestInImgFullPath = inImgDirPath + "\\" + earliestInImgFileName;
-				std::string arhiveImgFullPath = archiveImgDirPath + "\\" + earliestInImgFileName;
 
-				// ------------------------- POSE ESTIMATION AND RENDERING -------------------------
-				// Step 1 - Read and load image, error if empty (possibly wrong path)
-				// Alternative: cv::imread(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
-				//cv::Mat inputImage = op::loadImage(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
-				cv::Mat inputImage = op::loadImage(earliestInImgFullPath, CV_LOAD_IMAGE_COLOR);
-				if (inputImage.empty())
-					//op::error("Could not open or find the image: " + FLAGS_image_path, __LINE__, __FUNCTION__, __FILE__);
-					op::error("Could not open or find the image: " + earliestInImgFullPath, __LINE__, __FUNCTION__, __FILE__);
-				const op::Point<int> imageSize{ inputImage.cols, inputImage.rows };
-				// Step 2 - Get desired scale sizes
-				std::vector<double> scaleInputToNetInputs;
-				std::vector<op::Point<int>> netInputSizes;
+				// get oldest image from input directory
+				std::string earliestInImgFileName = getEarliestCreatedFileNameInDirectory(inImgDirPath);
+				if (earliestInImgFileName != "")
+				{
+					const auto timerBegin = std::chrono::high_resolution_clock::now();
 
-				double scaleInputToOutput;
-				op::Point<int> outputResolution;
-				std::tie(scaleInputToNetInputs, netInputSizes, scaleInputToOutput, outputResolution)
-					= scaleAndSizeExtractor.extract(imageSize);
+					std::string earliestInImgFullPath = inImgDirPath + "\\" + earliestInImgFileName;
+					std::string arhiveImgFullPath = archiveImgDirPath + "\\" + earliestInImgFileName;
 
-				// Step 3 - Format input image to OpenPose input and output formats
-				const auto netInputArray = cvMatToOpInput.createArray(inputImage, scaleInputToNetInputs, netInputSizes);
+					// ------------------------- POSE ESTIMATION AND RENDERING -------------------------
+					// Step 1 - Read and load image, error if empty (possibly wrong path)
+					// Alternative: cv::imread(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
+					//cv::Mat inputImage = op::loadImage(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
+					cv::Mat inputImage = op::loadImage(earliestInImgFullPath, CV_LOAD_IMAGE_COLOR);
+					if (inputImage.empty())
+						//op::error("Could not open or find the image: " + FLAGS_image_path, __LINE__, __FUNCTION__, __FILE__);
+						op::error("Could not open or find the image: " + earliestInImgFullPath, __LINE__, __FUNCTION__, __FILE__);
+					const op::Point<int> imageSize{ inputImage.cols, inputImage.rows };
+					// Step 2 - Get desired scale sizes
+					std::vector<double> scaleInputToNetInputs;
+					std::vector<op::Point<int>> netInputSizes;
+
+					double scaleInputToOutput;
+					op::Point<int> outputResolution;
+					std::tie(scaleInputToNetInputs, netInputSizes, scaleInputToOutput, outputResolution)
+						= scaleAndSizeExtractor.extract(imageSize);
+
+					// Step 3 - Format input image to OpenPose input and output formats
+					const auto netInputArray = cvMatToOpInput.createArray(inputImage, scaleInputToNetInputs, netInputSizes);
 #if _IsRenderImage
-				auto outputArray = cvMatToOpOutput.createArray(inputImage, scaleInputToOutput, outputResolution);
+					auto outputArray = cvMatToOpOutput.createArray(inputImage, scaleInputToOutput, outputResolution);
 #endif
-				// Step 4 - Estimate poseKeypoints
-				poseExtractorCaffe.forwardPass(netInputArray, imageSize, scaleInputToNetInputs);
-				const auto poseKeypoints = poseExtractorCaffe.getPoseKeypoints();
-				const std::string outputFileNameWithoutExtension = getFileNameWithoutExtensionFromPath(earliestInImgFullPath);
-				const std::string outputFileFullPath = outDirPath + "\\" + outputFileNameWithoutExtension + "_keypoints.json";
-				outputPoseKeypointsToJson(poseKeypoints, outputFileFullPath);
+					// Step 4 - Estimate poseKeypoints
+					poseExtractorCaffe.forwardPass(netInputArray, imageSize, scaleInputToNetInputs);
+					const auto poseKeypoints = poseExtractorCaffe.getPoseKeypoints();
+					const std::string outputFileNameWithoutExtension = getFileNameWithoutExtensionFromPath(earliestInImgFullPath);
+					const std::string outputFileFullPath = outDirPath + "\\" + outputFileNameWithoutExtension + "_keypoints.json";
+					outputPoseKeypointsToJson(poseKeypoints, outputFileFullPath);
 #if _IsRenderImage
-				// Step 5 - Render poseKeypoints
-				poseRenderer.renderPose(outputArray, poseKeypoints, scaleInputToOutput);
-				// Step 6 - OpenPose output format to cv::Mat
-				auto outputImage = opOutputToCvMat.formatToCvMat(outputArray);
+					// Step 5 - Render poseKeypoints
+					poseRenderer.renderPose(outputArray, poseKeypoints, scaleInputToOutput);
+					// Step 6 - OpenPose output format to cv::Mat
+					auto outputImage = opOutputToCvMat.formatToCvMat(outputArray);
 
-				// ------------------------- SHOWING RESULT AND CLOSING -------------------------
-				// Show results
-				frameDisplayer.displayFrame(outputImage, 0); // Alternative: cv::imshow(outputImage) + cv::waitKey(0)
+					// ------------------------- SHOWING RESULT AND CLOSING -------------------------
+					// Show results
+					frameDisplayer.displayFrame(outputImage, 0); // Alternative: cv::imshow(outputImage) + cv::waitKey(0)
 #endif
-				// Measuring total time
-				const auto now = std::chrono::high_resolution_clock::now();
-				const auto totalTimeSec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(now - timerBegin).count()
-					* 1e-9;
-				const auto message = "OpenPose demo successfully finished. Total time: "
-					+ std::to_string(totalTimeSec) + " seconds.";
-				op::log(message, op::Priority::High);
-				// Return successful message
+					// Measuring total time
+					const auto now = std::chrono::high_resolution_clock::now();
+					const auto totalTimeSec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(now - timerBegin).count()
+						* 1e-9;
+					const auto message = "OpenPose demo successfully finished. Total time: "
+						+ std::to_string(totalTimeSec) + " seconds.";
+					op::log(message, op::Priority::High);
+					// Return successful message
 
-				// TODO: handle error
-				MoveFileEx(earliestInImgFullPath.c_str(), arhiveImgFullPath.c_str(),
-					MOVEFILE_REPLACE_EXISTING);
+					// TODO: handle error
+					MoveFileEx(earliestInImgFullPath.c_str(), arhiveImgFullPath.c_str(),
+						MOVEFILE_REPLACE_EXISTING);
+				}
+				else
+				{
+					op::log("No input images in " + inImgDirPath);
+				}
+
+
 			}
-			else
+			catch (const std::exception& e)
 			{
-				op::log("No input images in " + inImgDirPath);
+				op::error(e.what(), __LINE__, __FUNCTION__, __FILE__);
+				//return -1;
 			}
+
+
+
+
 		}
 
 
