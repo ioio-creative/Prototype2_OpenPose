@@ -6,7 +6,8 @@
 #     # ...
 #     ADD_HERE_YOUR_FILEn.cpp)
 set(USER_CODE_FILES
-	prototype2_openpose.cpp)
+	prototype2_openpose.cpp
+	prototype2_openpose_osc.cpp)
 
 foreach(USER_CODE_FILE ${USER_CODE_FILES})
 
@@ -15,7 +16,7 @@ foreach(USER_CODE_FILE ${USER_CODE_FILES})
   if (UNIX OR APPLE)
     set(EXE_NAME "${SOURCE_NAME}.bin")
   elseif (WIN32)
-    set(EXE_NAME "UserCustomCode")
+    set(EXE_NAME "${SOURCE_NAME}")
   endif ()
 
   message(STATUS "Adding Example ${EXE_NAME}")

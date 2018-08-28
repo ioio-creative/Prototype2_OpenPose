@@ -79,7 +79,7 @@ std::string getDirectoryFromPath(const std::string path);
 std::string getEarliestCreatedFileNameInDirectory(const std::string& directoryName);
 std::string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const std::string outPath);
-int openPoseTutorialPose1(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath);
+int openPoseTutorialPose2(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath);
 
 
 int main(int argc, char *argv[])
@@ -257,7 +257,7 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const std::string
 	return !isError;
 }
 
-int openPoseTutorialPose1(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath)
+int openPoseTutorialPose2(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath)
 {
 	try
 	{
@@ -391,7 +391,8 @@ int openPoseTutorialPose1(const std::string inImgDirPath, const std::string outD
 			}
 			catch (const std::exception& e)
 			{
-				op::error(e.what(), __LINE__, __FUNCTION__, __FILE__);
+				//op::error(e.what(), __LINE__, __FUNCTION__, __FILE__);
+				op::log(e.what());
 				//return -1;
 			}
 
