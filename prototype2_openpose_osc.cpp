@@ -62,8 +62,7 @@ using namespace std;
 // #pragma comment (lib, "Mswsock.lib")
 
 #define DEFAULT_BUFLEN 512
-//#define DEFAULT_PORT "27015"
-#define DEFAULT_PORT "27156"
+//#define DEFAULT_PORT "27156"
 #define HOST_NAME_TO_USE "localhost"
 //#define MY_HOST_NAME "127.0.0.1"
 
@@ -125,15 +124,19 @@ string getEarliestCreatedFileNameInDirectory(const string& directoryName);
 /* openpose declarations */
 string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outPath);
-bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe);
+bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
+	string modelDirPath);
+/* Important: wrong use of pointer here */
 string openPoseGetJsonStrFromImg(string inImgPath,
-	op::ScaleAndSizeExtractor scaleAndSizeExtractor, op::CvMatToOpInput cvMatToOpInput, op::PoseExtractorCaffe poseExtractorCaffe);
+	op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
+	string *jsonPoseResult);
 struct clientSessionData
 {
 	SOCKET clientSocket;
 	op::ScaleAndSizeExtractor *scaleAndSizeExtractor;
 	op::CvMatToOpInput *cvMatToOpInput;
 	op::PoseExtractorCaffe *poseExtractorCaffe;
+	string *tcpMsgDelimiter;
 };
 /* end of openpose declarations */
 
@@ -150,35 +153,98 @@ int main(int argc, char *argv[])
 {
 	// OpenPose
 	// Parsing command line flags
-	gflags::ParseCommandLineFlags(&argc, &argv, true);	
+	gflags::ParseCommandLineFlags(&argc, &argv, true);
 
 
-	bool isSuccess;
+	// getting modelDirPath(OpenPose) and portToUse(Networking) from command line arguments
+	int portToUse;
+	string modelDirPath = "";
+	string tcpMsgDelimiter = "";
+	string usageMsg = "Usage: prototype2_openpose_osc modelDirPath tcpMsgDelimiter portToListen";
+	if (argc != 4)
+	{
+		op::log(usageMsg);
+		return 1;
+	}
+	modelDirPath = string(argv[1]);
+	tcpMsgDelimiter = string(argv[2]);
+	portToUse = stoi(argv[3]);
+	
+
+
+	/*bool isSuccess;
 	op::ScaleAndSizeExtractor *scaleAndSizeExtractor;
 	op::CvMatToOpInput *cvMatToOpInput;
 	op::PoseExtractorCaffe *poseExtractorCaffe;
-	isSuccess = initializeOpenPose(scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe);
+
+	isSuccess = initializeOpenPose(scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe, modelDirPath);
 	if (!isSuccess)
 	{
 		op::log("Error when initializing open pose. Exiting...");
 		return 1;
-	}
+	}*/
 
 
-	// getting portToUse from command line argument
-	int portToUse;
-	if (argc != 2)
-	{
-		op::log("Usage: UserCustomCode PortToListen");
-		//return 1;
 
-		op::log("No port is entered. Default port: " + string(DEFAULT_PORT) + " is used.");
-		portToUse = stoi(DEFAULT_PORT);
-	}
-	else
-	{
-		portToUse = stoi(argv[1]);
-	}
+	/* open pose initialization */
+
+	op::log("Starting OpenPose demo...", op::Priority::High);
+
+
+	// ------------------------- INITIALIZATION -------------------------
+	// Step 1 - Set logging level
+	// - 0 will output all the logging messages
+	// - 255 will output nothing
+	op::check(0 <= FLAGS_logging_level && FLAGS_logging_level <= 255, "Wrong logging_level value.",
+		__LINE__, __FUNCTION__, __FILE__);
+	op::ConfigureLog::setPriorityThreshold((op::Priority)FLAGS_logging_level);
+	op::log("", op::Priority::Low, __LINE__, __FUNCTION__, __FILE__);
+	// Step 2 - Read Google flags (user defined configuration)
+
+	// outputSize
+	const auto outputSize = op::flagsToPoint(FLAGS_output_resolution, "-1x-1");
+
+	// netInputSize
+	const auto netInputSize = op::flagsToPoint(FLAGS_net_resolution, "-1x368");
+	// poseModel
+	const auto poseModel = op::flagsToPoseModel(FLAGS_model_pose);
+	// Check no contradictory flags enabled
+	if (FLAGS_alpha_pose < 0. || FLAGS_alpha_pose > 1.)
+		op::error("Alpha value for blending must be in the range [0,1].", __LINE__, __FUNCTION__, __FILE__);
+	if (FLAGS_scale_gap <= 0. && FLAGS_scale_number > 1)
+		op::error("Incompatible flag configuration: scale_gap must be greater than 0 or scale_number = 1.",
+			__LINE__, __FUNCTION__, __FILE__);
+	// Logging
+	op::log("", op::Priority::Low, __LINE__, __FUNCTION__, __FILE__);
+	// Step 3 - Initialize all required classes
+
+	op::ScaleAndSizeExtractor scaleAndSizeExtractor(netInputSize, outputSize, FLAGS_scale_number, FLAGS_scale_gap);
+
+
+	op::CvMatToOpInput cvMatToOpInput { poseModel };
+#if _IsRenderImage
+	op::CvMatToOpOutput cvMatToOpOutput;
+#endif
+	//poseExtractorCaffe = new op::PoseExtractorCaffe { poseModel, FLAGS_model_folder, FLAGS_num_gpu_start };
+	op::PoseExtractorCaffe poseExtractorCaffe { poseModel, modelDirPath + "/", FLAGS_num_gpu_start };
+#if _IsRenderImage
+	op::PoseCpuRenderer poseRenderer{ poseModel, (float)FLAGS_render_threshold, !FLAGS_disable_blending,
+		(float)FLAGS_alpha_pose };
+	op::OpOutputToCvMat opOutputToCvMat;
+	std::string frameTitle = "OpenPose Tutorial - Example 1";
+	op::FrameDisplayer frameDisplayer{ frameTitle, outputSize };
+#endif
+	// Step 4 - Initialize resources on desired thread (in this case single thread, i.e. we init resources here)
+	poseExtractorCaffe.initializationOnThread();
+#if _IsRenderImage
+	poseRenderer.initializationOnThread();
+#endif
+
+	/* end of open pose initialization */
+
+
+
+		
 
 	
 	int iResult;
@@ -186,7 +252,7 @@ int main(int argc, char *argv[])
 	SOCKET ClientSocket = INVALID_SOCKET;
 
 	
-	iResult = initializeTcpServer(HOST_NAME_TO_USE, stoi(DEFAULT_PORT), &ListenSocket);
+	iResult = initializeTcpServer(HOST_NAME_TO_USE, portToUse, &ListenSocket);
 	if (iResult != 0)
 	{
 		return iResult;
@@ -194,7 +260,8 @@ int main(int argc, char *argv[])
 
 	// TCP Winsock: accept multiple connections/clients
 	// https://stackoverflow.com/questions/16686444/function-names-conflict-in-c
-	op::log("Waiting for incoming socket...");
+	op::log("Port: " + to_string(portToUse) + " is used.");
+	op::log("Waiting for incoming socket...");	
 	while ((ClientSocket = accept(ListenSocket, NULL, NULL)))
 	{
 		if (ClientSocket == INVALID_SOCKET) {
@@ -205,15 +272,25 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
-		struct clientSessionData *data;
+		/*struct clientSessionData *data;
 		data->clientSocket = ClientSocket;
-		data->scaleAndSizeExtractor = scaleAndSizeExtractor;
-		data->cvMatToOpInput = cvMatToOpInput;
-		data->poseExtractorCaffe = poseExtractorCaffe;
+		data->scaleAndSizeExtractor = &scaleAndSizeExtractor;
+		data->cvMatToOpInput = &cvMatToOpInput;
+		data->poseExtractorCaffe = &poseExtractorCaffe;
+		data->tcpMsgDelimiter = tcpMsgDelimiter;*/
+
+		struct clientSessionData data;
+		data.clientSocket = ClientSocket;
+		data.scaleAndSizeExtractor = &scaleAndSizeExtractor;
+		data.cvMatToOpInput = &cvMatToOpInput;
+		data.poseExtractorCaffe = &poseExtractorCaffe;
+		data.tcpMsgDelimiter = &tcpMsgDelimiter;
 
 		// Create a new thread for the accepted client (also pass the accepted client socket).
-		unsigned threadID;
-		HANDLE hThread = (HANDLE)_beginthreadex(NULL, 0, &ClientSession, (void*)data, 0, &threadID);
+		/*unsigned threadID;
+		HANDLE hThread = (HANDLE)_beginthreadex(NULL, 0, &ClientSession, (void*)&data, 0, &threadID);*/
+
+		ClientSession((void*)&data);
 	}
 
 	closeDownTcpServer(ListenSocket, ClientSocket);
@@ -380,7 +457,8 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outP
 	return !isError;
 }
 
-bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe)
+bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
+	string modelDirPath)
 {
 	bool isSuccess = false;
 	
@@ -418,11 +496,13 @@ bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::Cv
 
 		scaleAndSizeExtractor = new op::ScaleAndSizeExtractor(netInputSize, outputSize, FLAGS_scale_number, FLAGS_scale_gap);
 
+
 		cvMatToOpInput = new op::CvMatToOpInput { poseModel };
 #if _IsRenderImage
 		op::CvMatToOpOutput cvMatToOpOutput;
 #endif
-		poseExtractorCaffe = new op::PoseExtractorCaffe { poseModel, FLAGS_model_folder, FLAGS_num_gpu_start };
+		//poseExtractorCaffe = new op::PoseExtractorCaffe { poseModel, FLAGS_model_folder, FLAGS_num_gpu_start };
+		poseExtractorCaffe = new op::PoseExtractorCaffe{ poseModel, modelDirPath + "/", FLAGS_num_gpu_start };
 #if _IsRenderImage
 		op::PoseCpuRenderer poseRenderer{ poseModel, (float)FLAGS_render_threshold, !FLAGS_disable_blending,
 			(float)FLAGS_alpha_pose };
@@ -447,75 +527,76 @@ bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::Cv
 	return isSuccess;
 }
 
+/* Important: wrong use of pointer here */
 string openPoseGetJsonStrFromImg(string inImgPath,
-	op::ScaleAndSizeExtractor scaleAndSizeExtractor, op::CvMatToOpInput cvMatToOpInput, op::PoseExtractorCaffe poseExtractorCaffe)
+	op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
+	string *jsonPoseResult)
 {
-//	// get oldest image from input directory
-//	std::string earliestInImgFileName = getEarliestCreatedFileNameInDirectory(inImgDirPath);
-//	if (earliestInImgFileName != "")
-//	{
-//		const auto timerBegin = std::chrono::high_resolution_clock::now();
-//
-//		std::string earliestInImgFullPath = inImgDirPath + "\\" + earliestInImgFileName;
-//		std::string arhiveImgFullPath = archiveImgDirPath + "\\" + earliestInImgFileName;
-//
-//		// ------------------------- POSE ESTIMATION AND RENDERING -------------------------
-//		// Step 1 - Read and load image, error if empty (possibly wrong path)
-//		// Alternative: cv::imread(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
-//		//cv::Mat inputImage = op::loadImage(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
-//		cv::Mat inputImage = op::loadImage(earliestInImgFullPath, CV_LOAD_IMAGE_COLOR);
-//		if (inputImage.empty())
-//			//op::error("Could not open or find the image: " + FLAGS_image_path, __LINE__, __FUNCTION__, __FILE__);
-//			op::error("Could not open or find the image: " + earliestInImgFullPath, __LINE__, __FUNCTION__, __FILE__);
-//		const op::Point<int> imageSize{ inputImage.cols, inputImage.rows };
-//		// Step 2 - Get desired scale sizes
-//		std::vector<double> scaleInputToNetInputs;
-//		std::vector<op::Point<int>> netInputSizes;
-//
-//		double scaleInputToOutput;
-//		op::Point<int> outputResolution;
-//		std::tie(scaleInputToNetInputs, netInputSizes, scaleInputToOutput, outputResolution)
-//			= scaleAndSizeExtractor.extract(imageSize);
-//
-//		// Step 3 - Format input image to OpenPose input and output formats
-//		const auto netInputArray = cvMatToOpInput.createArray(inputImage, scaleInputToNetInputs, netInputSizes);
-//#if _IsRenderImage
-//		auto outputArray = cvMatToOpOutput.createArray(inputImage, scaleInputToOutput, outputResolution);
-//#endif
-//		// Step 4 - Estimate poseKeypoints
-//		poseExtractorCaffe.forwardPass(netInputArray, imageSize, scaleInputToNetInputs);
-//		const auto poseKeypoints = poseExtractorCaffe.getPoseKeypoints();
-//		const std::string outputFileNameWithoutExtension = getFileNameWithoutExtensionFromPath(earliestInImgFullPath);
-//		const std::string outputFileFullPath = outDirPath + "\\" + outputFileNameWithoutExtension + "_keypoints.json";
-//		outputPoseKeypointsToJson(poseKeypoints, outputFileFullPath);
-//#if _IsRenderImage
-//		// Step 5 - Render poseKeypoints
-//		poseRenderer.renderPose(outputArray, poseKeypoints, scaleInputToOutput);
-//		// Step 6 - OpenPose output format to cv::Mat
-//		auto outputImage = opOutputToCvMat.formatToCvMat(outputArray);
-//
-//		// ------------------------- SHOWING RESULT AND CLOSING -------------------------
-//		// Show results
-//		frameDisplayer.displayFrame(outputImage, 0); // Alternative: cv::imshow(outputImage) + cv::waitKey(0)
-//#endif
-//																 // Measuring total time
-//		const auto now = std::chrono::high_resolution_clock::now();
-//		const auto totalTimeSec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(now - timerBegin).count()
-//			* 1e-9;
-//		const auto message = "OpenPose demo successfully finished. Total time: "
-//			+ std::to_string(totalTimeSec) + " seconds.";
-//		op::log(message, op::Priority::High);
-//		// Return successful message
-//
-//		// TODO: handle error
-//		MoveFileEx(earliestInImgFullPath.c_str(), arhiveImgFullPath.c_str(),
-//			MOVEFILE_REPLACE_EXISTING);
-//	}
-//	else
-//	{
-//		op::log("No input images in " + inImgDirPath);
-//	}
-	return "";
+	string errMsg = "";
+
+	try
+	{
+		const auto timerBegin = std::chrono::high_resolution_clock::now();
+
+
+		// ------------------------- POSE ESTIMATION AND RENDERING -------------------------
+		// Step 1 - Read and load image, error if empty (possibly wrong path)
+		// Alternative: cv::imread(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
+		//cv::Mat inputImage = op::loadImage(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
+		cv::Mat inputImage = op::loadImage(inImgPath, CV_LOAD_IMAGE_COLOR);
+		if (inputImage.empty())
+		{
+			//op::error("Could not open or find the image: " + FLAGS_image_path, __LINE__, __FUNCTION__, __FILE__);
+			//op::error("Could not open or find the image: " + inImgPath, __LINE__, __FUNCTION__, __FILE__);
+
+			throw std::runtime_error{ "Could not open or find the image: " + inImgPath };
+		}
+		const op::Point<int> imageSize{ inputImage.cols, inputImage.rows };
+		// Step 2 - Get desired scale sizes
+		std::vector<double> scaleInputToNetInputs;
+		std::vector<op::Point<int>> netInputSizes;
+
+		double scaleInputToOutput;
+		op::Point<int> outputResolution;
+		std::tie(scaleInputToNetInputs, netInputSizes, scaleInputToOutput, outputResolution)
+			= (*scaleAndSizeExtractor).extract(imageSize);
+
+		// Step 3 - Format input image to OpenPose input and output formats
+		const auto netInputArray = (*cvMatToOpInput).createArray(inputImage, scaleInputToNetInputs, netInputSizes);
+#if _IsRenderImage
+		auto outputArray = cvMatToOpOutput.createArray(inputImage, scaleInputToOutput, outputResolution);
+#endif
+		// Step 4 - Estimate poseKeypoints
+		(*poseExtractorCaffe).forwardPass(netInputArray, imageSize, scaleInputToNetInputs);
+		const auto poseKeypoints = (*poseExtractorCaffe).getPoseKeypoints();
+
+#if _IsRenderImage
+		// Step 5 - Render poseKeypoints
+		poseRenderer.renderPose(outputArray, poseKeypoints, scaleInputToOutput);
+		// Step 6 - OpenPose output format to cv::Mat
+		auto outputImage = opOutputToCvMat.formatToCvMat(outputArray);
+
+		// ------------------------- SHOWING RESULT AND CLOSING -------------------------
+		// Show results
+		frameDisplayer.displayFrame(outputImage, 0); // Alternative: cv::imshow(outputImage) + cv::waitKey(0)
+#endif
+																 // Measuring total time
+		const auto now = std::chrono::high_resolution_clock::now();
+		const auto totalTimeSec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(now - timerBegin).count()
+			* 1e-9;
+		const auto message = "OpenPose demo successfully finished. Total time: "
+			+ std::to_string(totalTimeSec) + " seconds.";
+		op::log(message, op::Priority::High);
+
+		// return json containing poseKeypoints
+		*jsonPoseResult = getJsonFromPoseKeyPoints(poseKeypoints);
+	}
+	catch (const exception& e)
+	{
+		errMsg = e.what();
+	}
+
+	return errMsg;
 }
 
 /* end of openpose implementations */
@@ -548,7 +629,7 @@ int initializeTcpServer(string hostNameToUse, int port, SOCKET *ListenSocket)
 
 	// Resolve the server address and port	
 	//iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
-	iResult = getaddrinfo(hostNameToUse.c_str(), DEFAULT_PORT, &hints, &result);
+	iResult = getaddrinfo(hostNameToUse.c_str(), (to_string(port)).c_str(), &hints, &result);
 	if (iResult != 0) {
 		printf("getaddrinfo failed with error: %d\n", iResult);
 		WSACleanup();
@@ -611,6 +692,7 @@ unsigned __stdcall ClientSession(void *data)
 		op::ScaleAndSizeExtractor *scaleAndSizeExtractor = ClientSessionData->scaleAndSizeExtractor;
 		op::CvMatToOpInput *cvMatToOpInput = ClientSessionData->cvMatToOpInput;
 		op::PoseExtractorCaffe *poseExtractorCaffe = ClientSessionData->poseExtractorCaffe;
+		string *tcpMsgDelimiter = ClientSessionData->tcpMsgDelimiter;
 
 		string resultantMsg = "";
 
@@ -646,16 +728,26 @@ unsigned __stdcall ClientSession(void *data)
 			}
 		} while (iResult > 0);
 
-		cout << "Resultant message: ";
+		cout << "Received message: ";
 		cout << resultantMsg << endl;
 
-		string imgFilePath = resultantMsg;
-		/*openPoseGetJsonStrFromImg(imgFilePath,
-			*scaleAndSizeExtractor, *cvMatToOpInput, poseExtractorCaffe)*/
+		string imgFilePath = resultantMsg.substr(0, resultantMsg.find(*tcpMsgDelimiter));
+		string jsonPose;
+		string getPoseErrMsg = openPoseGetJsonStrFromImg(imgFilePath,
+			scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
+			&jsonPose);
+
+		if (getPoseErrMsg != "")
+		{
+			printf(getPoseErrMsg.c_str());
+			closesocket(ClientSocket);
+			WSACleanup();
+			return 1;
+		}
 
 
 		// send something
-		char sendbuf[] = "this is a test reply";
+		const char *sendbuf = jsonPose.c_str();
 		iResult = send(ClientSocket, sendbuf, (int)strlen(sendbuf), 0);
 		if (iResult == SOCKET_ERROR) {
 			printf("send failed with error: %d\n", WSAGetLastError());
@@ -663,6 +755,9 @@ unsigned __stdcall ClientSession(void *data)
 			WSACleanup();
 			return 1;
 		}
+
+		cout << "Sent message: ";
+		cout << jsonPose << endl;
 
 		// shutdown the connection since we're done
 		iResult = shutdown(ClientSocket, SD_SEND);

@@ -79,7 +79,8 @@ std::string getDirectoryFromPath(const std::string path);
 std::string getEarliestCreatedFileNameInDirectory(const std::string& directoryName);
 std::string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const std::string outPath);
-int openPoseTutorialPose2(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath);
+int openPoseTutorialPose2(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath,
+	const std::string modelDirPath);
 
 
 int main(int argc, char *argv[])
@@ -87,21 +88,23 @@ int main(int argc, char *argv[])
 	// Parsing command line flags
 	gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-	if (argc != 4)
+	std::string usageMsg = "Usage: prototype2_openpose inImgDirPath outDirPath archiveImgDirPath modelDirPath";
+	if (argc != 5)
 	{
-		op::log("Usage: UserCustomCode inImgDirPath outDirPath archiveImgDirPath", op::Priority::High);
+		op::log("Usage: prototype2_openpose inImgDirPath outDirPath archiveImgDirPath modelDirPath");
 		return 1;
 	}
 
 	std::string inImgDirPath = std::string(argv[1]);
 	std::string outDirPath = std::string(argv[2]);
 	std::string archiveImgDirPath = std::string(argv[3]);
+	std::string modelDirPath = std::string(argv[4]);
 
 	// TODO: handle error
 	CreateDirectory(outDirPath.c_str(), NULL);
 	CreateDirectory(archiveImgDirPath.c_str(), NULL);
 
-	int errorCode = openPoseTutorialPose1(inImgDirPath, outDirPath, archiveImgDirPath);
+	int errorCode = openPoseTutorialPose2(inImgDirPath, outDirPath, archiveImgDirPath, modelDirPath);
 
 	return 0;
 }
@@ -257,7 +260,8 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const std::string
 	return !isError;
 }
 
-int openPoseTutorialPose2(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath)
+int openPoseTutorialPose2(const std::string inImgDirPath, const std::string outDirPath, const std::string archiveImgDirPath,
+	const std::string modelDirPath)
 {
 	try
 	{
@@ -298,7 +302,8 @@ int openPoseTutorialPose2(const std::string inImgDirPath, const std::string outD
 #if _IsRenderImage
 		op::CvMatToOpOutput cvMatToOpOutput;
 #endif
-		op::PoseExtractorCaffe poseExtractorCaffe{ poseModel, FLAGS_model_folder, FLAGS_num_gpu_start };
+		//op::PoseExtractorCaffe poseExtractorCaffe{ poseModel, FLAGS_model_folder, FLAGS_num_gpu_start };
+		op::PoseExtractorCaffe poseExtractorCaffe{ poseModel, modelDirPath + "/", FLAGS_num_gpu_start };
 #if _IsRenderImage
 		op::PoseCpuRenderer poseRenderer{ poseModel, (float)FLAGS_render_threshold, !FLAGS_disable_blending,
 			(float)FLAGS_alpha_pose };
