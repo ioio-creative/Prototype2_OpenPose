@@ -269,6 +269,8 @@ int main(int argc, char *argv[])
 			/*closesocket(ListenSocket);
 			WSACleanup();
 			return 1;*/
+
+			//closesocket(ClientSocket);
 			continue;
 		}
 
@@ -289,6 +291,10 @@ int main(int argc, char *argv[])
 		// Create a new thread for the accepted client (also pass the accepted client socket).
 		/*unsigned threadID;
 		HANDLE hThread = (HANDLE)_beginthreadex(NULL, 0, &ClientSession, (void*)&data, 0, &threadID);*/
+
+		/*
+			Problem with threading: https://github.com/CMU-Perceptual-Computing-Lab/openpose/issues/322
+		*/
 
 		ClientSession((void*)&data);
 	}
@@ -694,6 +700,7 @@ unsigned __stdcall ClientSession(void *data)
 		op::PoseExtractorCaffe *poseExtractorCaffe = ClientSessionData->poseExtractorCaffe;
 		string *tcpMsgDelimiter = ClientSessionData->tcpMsgDelimiter;
 
+
 		string resultantMsg = "";
 
 		// Receive until the peer shuts down the connection
@@ -708,15 +715,54 @@ unsigned __stdcall ClientSession(void *data)
 				string recvbufStr = string(recvbuf);
 				resultantMsg += recvbufStr;
 
-				// Echo the buffer back to the sender
-				iSendResult = send(ClientSocket, recvbuf, iResult, 0);
+				// Echo the buffer back to the sender		
+				/*iSendResult = send(ClientSocket, recvbuf, iResult, 0);
 				if (iSendResult == SOCKET_ERROR) {
 					printf("send failed with error: %d\n", WSAGetLastError());
 					closesocket(ClientSocket);
 					WSACleanup();
 					return 1;
 				}
-				printf("Bytes sent: %d\n", iSendResult);
+				printf("Bytes sent: %d\n", iSendResult);*/
+
+
+				cout << "Received message: ";
+				cout << resultantMsg << endl;
+
+				string imgFilePath = resultantMsg.substr(0, resultantMsg.find(*tcpMsgDelimiter));
+				string jsonPose;
+				string getPoseErrMsg = openPoseGetJsonStrFromImg(imgFilePath,
+					scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
+					&jsonPose);
+
+				if (getPoseErrMsg != "")
+				{
+					printf(getPoseErrMsg.c_str());
+					closesocket(ClientSocket);
+					WSACleanup();
+					return 1;
+				}
+
+
+				jsonPose += *tcpMsgDelimiter;
+
+
+				// send something
+				const char *sendbuf = jsonPose.c_str();
+				int sendBufStrLen = (int)strlen(sendbuf);
+				iSendResult = send(ClientSocket, sendbuf, sendBufStrLen, 0);
+				if (iSendResult == SOCKET_ERROR) {
+					printf("send failed with error: %d\n", WSAGetLastError());
+					closesocket(ClientSocket);
+					WSACleanup();
+					return 1;
+				}
+
+				cout << "Sent message: ";
+				cout << jsonPose << endl;
+				
+
+
 			}
 			else if (iResult == 0)
 				printf("Connection closing...\n");
@@ -728,36 +774,10 @@ unsigned __stdcall ClientSession(void *data)
 			}
 		} while (iResult > 0);
 
-		cout << "Received message: ";
-		cout << resultantMsg << endl;
 
-		string imgFilePath = resultantMsg.substr(0, resultantMsg.find(*tcpMsgDelimiter));
-		string jsonPose;
-		string getPoseErrMsg = openPoseGetJsonStrFromImg(imgFilePath,
-			scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
-			&jsonPose);
+		
 
-		if (getPoseErrMsg != "")
-		{
-			printf(getPoseErrMsg.c_str());
-			closesocket(ClientSocket);
-			WSACleanup();
-			return 1;
-		}
-
-
-		// send something
-		const char *sendbuf = jsonPose.c_str();
-		iResult = send(ClientSocket, sendbuf, (int)strlen(sendbuf), 0);
-		if (iResult == SOCKET_ERROR) {
-			printf("send failed with error: %d\n", WSAGetLastError());
-			closesocket(ClientSocket);
-			WSACleanup();
-			return 1;
-		}
-
-		cout << "Sent message: ";
-		cout << jsonPose << endl;
+						
 
 		// shutdown the connection since we're done
 		iResult = shutdown(ClientSocket, SD_SEND);
@@ -766,7 +786,7 @@ unsigned __stdcall ClientSession(void *data)
 			closesocket(ClientSocket);
 			WSACleanup();
 			return 1;
-		}
+		}		
 	}
 	catch (const exception& e)
 	{
