@@ -123,6 +123,7 @@ string getEarliestCreatedFileNameInDirectory(const string& directoryName);
 
 /* openpose declarations */
 string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
+string getSimplifiedJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outPath);
 bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
 	string modelDirPath);
@@ -231,7 +232,7 @@ int main(int argc, char *argv[])
 	op::PoseCpuRenderer poseRenderer{ poseModel, (float)FLAGS_render_threshold, !FLAGS_disable_blending,
 		(float)FLAGS_alpha_pose };
 	op::OpOutputToCvMat opOutputToCvMat;
-	std::string frameTitle = "OpenPose Tutorial - Example 1";
+	string frameTitle = "OpenPose Tutorial - Example 1";
 	op::FrameDisplayer frameDisplayer{ frameTitle, outputSize };
 #endif
 	// Step 4 - Initialize resources on desired thread (in this case single thread, i.e. we init resources here)
@@ -309,10 +310,10 @@ int main(int argc, char *argv[])
 
 string getFileNameFromPath(const string path)
 {
-	std::string fileName = path;
+	string fileName = path;
 	int pathStrLength = path.length();
 	const size_t last_slash_idx = path.rfind('\\');
-	if (std::string::npos != last_slash_idx)
+	if (string::npos != last_slash_idx)
 	{
 		if (pathStrLength > last_slash_idx)
 		{
@@ -328,10 +329,10 @@ string getFileNameFromPath(const string path)
 
 string getFileNameWithoutExtensionFromPath(const string path)
 {
-	std::string fileNameWithExtension = getFileNameFromPath(path);
-	std::string fileNameWithoutExtension = fileNameWithExtension;
+	string fileNameWithExtension = getFileNameFromPath(path);
+	string fileNameWithoutExtension = fileNameWithExtension;
 	const size_t dot_idx = fileNameWithExtension.rfind('.');
-	if (std::string::npos != dot_idx)
+	if (string::npos != dot_idx)
 	{
 		fileNameWithoutExtension = fileNameWithExtension.substr(0, dot_idx);
 	}
@@ -340,9 +341,9 @@ string getFileNameWithoutExtensionFromPath(const string path)
 
 string getDirectoryFromPath(const string path)
 {
-	std::string directory = "";
+	string directory = "";
 	const size_t last_slash_idx = path.rfind('\\');
-	if (std::string::npos != last_slash_idx)
+	if (string::npos != last_slash_idx)
 	{
 		directory = path.substr(0, last_slash_idx);
 	}
@@ -351,7 +352,7 @@ string getDirectoryFromPath(const string path)
 
 string getEarliestCreatedFileNameInDirectory(const string& directoryName)
 {
-	std::string pattern(directoryName);
+	string pattern(directoryName);
 	pattern.append("\\*");
 	WIN32_FIND_DATA data;
 	HANDLE hFind;
@@ -363,7 +364,7 @@ string getEarliestCreatedFileNameInDirectory(const string& directoryName)
 	}
 
 	FILETIME oldest = { -1U, -1U };
-	std::string oldestFile = "";
+	string oldestFile = "";
 
 	do {
 		if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
@@ -389,10 +390,41 @@ string getEarliestCreatedFileNameInDirectory(const string& directoryName)
 
 /* openpose implementations */
 
+// https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/doc/output.md
+// Result for BODY_25 (25 body parts consisting of COCO + foot)
+ const map<unsigned int, string> POSE_BODY_25_BODY_PARTS {
+     {0,  "Nose"},
+     {1,  "Neck"},
+     {2,  "RShoulder"},
+     {3,  "RElbow"},
+     {4,  "RWrist"},
+     {5,  "LShoulder"},
+     {6,  "LElbow"},
+     {7,  "LWrist"},
+     {8,  "MidHip"},
+     {9,  "RHip"},
+     {10, "RKnee"},
+     {11, "RAnkle"},
+     {12, "LHip"},
+     {13, "LKnee"},
+     {14, "LAnkle"},
+     {15, "REye"},
+     {16, "LEye"},
+     {17, "REar"},
+     {18, "LEar"},
+     {19, "LBigToe"},
+     {20, "LSmallToe"},
+     {21, "LHeel"},
+     {22, "RBigToe"},
+     {23, "RSmallToe"},
+     {24, "RHeel"},
+     {25, "Background"}
+ };
+
 string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
 {
-	std::string jsonResult = "{\"version\":1.2,\"people\":[";
-	const std::string delimiter = ",";
+	string jsonResult = "{\"version\":1.2,\"people\":[";
+	const string delimiter = ",";
 	const int numOfPoseKeyPointsPerBody = 25 * 3;
 	int arrayLength = poseKeyPoints.getVolume();
 	for (int i = 0; i < arrayLength; i++)
@@ -417,11 +449,50 @@ string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
 			jsonResult += "\"hand_left_keypoints_3d\" : [],",
 				jsonResult += "\"hand_right_keypoints_3d\" : []},";
 		}
+	}
 
-		if (incrementI == arrayLength)
-		{
+	if (jsonResult != "")
+	{
+		jsonResult = jsonResult.substr(0, jsonResult.length() - 1);
+		jsonResult += "]}";
+	}
 
+	return jsonResult;
+}
+
+string getSimplifiedJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
+{
+	string jsonResult = "{\"people\":[";
+	const int numOfNumbersPerPoseKeyPoint = 3;
+	const int numOfPoseKeyPointsPerBody = 25;
+	const int numOfNumbersPerBody = numOfNumbersPerPoseKeyPoint * numOfPoseKeyPointsPerBody;
+	int arrayLength = poseKeyPoints.getVolume();
+
+	int numOfBodies = arrayLength / numOfNumbersPerBody;
+
+	for (int i = 0; i < numOfBodies; i++) {
+		// start of body
+		jsonResult += "{";
+
+		for (int j = 0; j < numOfPoseKeyPointsPerBody; j++) {
+			// start of body part
+			jsonResult += "\"" + POSE_BODY_25_BODY_PARTS.at(j) +
+				"\":[";
+
+			// numOfNumbersPerPoseKeyPoint - 1 because we ignore the 3rd coordinate for each pose key point
+			for (int k = 0; k < numOfNumbersPerPoseKeyPoint - 1; k++) {
+				//cout << i * numOfPoseKeyPointsPerBody + j * numOfNumbersPerPoseKeyPoint + k << endl;
+				jsonResult += to_string(poseKeyPoints[i * numOfPoseKeyPointsPerBody + j * numOfNumbersPerPoseKeyPoint + k]) + ",";
+			}			
+
+			// end of body part
+			jsonResult = jsonResult.substr(0, jsonResult.length() - 1);
+			jsonResult += "],";
 		}
+
+		// end of body
+		jsonResult = jsonResult.substr(0, jsonResult.length() - 1);
+		jsonResult += "},";
 	}
 
 	if (jsonResult != "")
@@ -444,8 +515,9 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outP
 
 		if (myFile.is_open())
 		{
-			myFile << getJsonFromPoseKeyPoints(poseKeyPoints);
 			//myFile << poseKeyPoints;
+			//myFile << getJsonFromPoseKeyPoints(poseKeyPoints);
+			myFile << getSimplifiedJsonFromPoseKeyPoints(poseKeyPoints);
 		}
 		else
 		{
@@ -513,7 +585,7 @@ bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::Cv
 		op::PoseCpuRenderer poseRenderer{ poseModel, (float)FLAGS_render_threshold, !FLAGS_disable_blending,
 			(float)FLAGS_alpha_pose };
 		op::OpOutputToCvMat opOutputToCvMat;
-		std::string frameTitle = "OpenPose Tutorial - Example 1";
+		string frameTitle = "OpenPose Tutorial - Example 1";
 		op::FrameDisplayer frameDisplayer{ frameTitle, outputSize };
 #endif
 		// Step 4 - Initialize resources on desired thread (in this case single thread, i.e. we init resources here)
@@ -595,7 +667,7 @@ string openPoseGetJsonStrFromImg(string inImgPath,
 		op::log(message, op::Priority::High);
 
 		// return json containing poseKeypoints
-		*jsonPoseResult = getJsonFromPoseKeyPoints(poseKeypoints);
+		*jsonPoseResult = getSimplifiedJsonFromPoseKeyPoints(poseKeypoints);
 	}
 	catch (const exception& e)
 	{
@@ -701,19 +773,14 @@ unsigned __stdcall ClientSession(void *data)
 		string *tcpMsgDelimiter = ClientSessionData->tcpMsgDelimiter;
 
 
-		string resultantMsg = "";
-
 		// Receive until the peer shuts down the connection
 		do {
 			iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
 
 			if (iResult > 0) {
 				printf("Bytes received: %d\n", iResult);
-				cout << "Bytes converted to str: ";
-				cout << recvbuf << endl;
 
 				string recvbufStr = string(recvbuf);
-				resultantMsg += recvbufStr;
 
 				// Echo the buffer back to the sender		
 				/*iSendResult = send(ClientSocket, recvbuf, iResult, 0);
@@ -727,9 +794,9 @@ unsigned __stdcall ClientSession(void *data)
 
 
 				cout << "Received message: ";
-				cout << resultantMsg << endl;
+				cout << recvbufStr << endl;
 
-				string imgFilePath = resultantMsg.substr(0, resultantMsg.find(*tcpMsgDelimiter));
+				string imgFilePath = recvbufStr.substr(0, recvbufStr.find(*tcpMsgDelimiter));
 				string jsonPose;
 				string getPoseErrMsg = openPoseGetJsonStrFromImg(imgFilePath,
 					scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
@@ -739,7 +806,7 @@ unsigned __stdcall ClientSession(void *data)
 				{
 					printf(getPoseErrMsg.c_str());
 					closesocket(ClientSocket);
-					WSACleanup();
+					//WSACleanup();
 					return 1;
 				}
 
@@ -754,7 +821,7 @@ unsigned __stdcall ClientSession(void *data)
 				if (iSendResult == SOCKET_ERROR) {
 					printf("send failed with error: %d\n", WSAGetLastError());
 					closesocket(ClientSocket);
-					WSACleanup();
+					//WSACleanup();
 					return 1;
 				}
 
@@ -769,7 +836,7 @@ unsigned __stdcall ClientSession(void *data)
 			else {
 				printf("recv failed with error: %d\n", WSAGetLastError());
 				closesocket(ClientSocket);
-				WSACleanup();
+				//WSACleanup();
 				return 1;
 			}
 		} while (iResult > 0);
@@ -784,7 +851,7 @@ unsigned __stdcall ClientSession(void *data)
 		if (iResult == SOCKET_ERROR) {
 			printf("shutdown failed with error: %d\n", WSAGetLastError());
 			closesocket(ClientSocket);
-			WSACleanup();
+			//WSACleanup();
 			return 1;
 		}		
 	}

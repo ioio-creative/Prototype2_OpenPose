@@ -214,11 +214,6 @@ std::string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
 			jsonResult += "\"hand_left_keypoints_3d\" : [],",
 			jsonResult += "\"hand_right_keypoints_3d\" : []},";
 		}
-
-		if (incrementI == arrayLength)
-		{
-
-		}
 	}
 
 	if (jsonResult != "")
