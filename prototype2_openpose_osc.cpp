@@ -125,9 +125,9 @@ string getEarliestCreatedFileNameInDirectory(const string& directoryName);
 string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 string getSimplifiedJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outPath);
+/* Important: wrong use of pointer here */
 bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
 	string modelDirPath);
-/* Important: wrong use of pointer here */
 string openPoseGetJsonStrFromImg(string inImgPath,
 	op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
 	string *jsonPoseResult);
@@ -535,6 +535,7 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outP
 	return !isError;
 }
 
+/* Important: wrong use of pointer here */
 bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
 	string modelDirPath)
 {
@@ -605,7 +606,6 @@ bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::Cv
 	return isSuccess;
 }
 
-/* Important: wrong use of pointer here */
 string openPoseGetJsonStrFromImg(string inImgPath,
 	op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
 	string *jsonPoseResult)

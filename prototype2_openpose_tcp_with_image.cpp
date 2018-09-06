@@ -61,7 +61,8 @@ using namespace std;
 #pragma comment (lib, "Ws2_32.lib")
 // #pragma comment (lib, "Mswsock.lib")
 
-#define DEFAULT_BUFLEN 512
+//#define DEFAULT_BUFLEN 512
+#define DEFAULT_BUFLEN 65536
 //#define DEFAULT_PORT "27156"
 #define HOST_NAME_TO_USE "localhost"
 //#define MY_HOST_NAME "127.0.0.1"
@@ -125,10 +126,7 @@ string getEarliestCreatedFileNameInDirectory(const string& directoryName);
 string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 string getSimplifiedJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outPath);
-bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
-	string modelDirPath);
-/* Important: wrong use of pointer here */
-string openPoseGetJsonStrFromImg(string inImgPath,
+string openPoseGetJsonStrFromImg(string imgEncodedInStr,
 	op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
 	string *jsonPoseResult);
 struct clientSessionData
@@ -146,6 +144,12 @@ int initializeTcpServer(string hostNameToUse, int port, SOCKET *listenSocket);
 void closeDownTcpServer(SOCKET ListenSocket, SOCKET ClientSocket);
 unsigned __stdcall ClientSession(void *data);
 /* end of Winsock server declarations */
+
+/* base64 conversion declarations */
+static inline bool is_base64(unsigned char c);
+string base64_decode(string const& encoded_string);
+cv::Mat convertBase64ToMat(string encodedStr);
+/* end of base64 conversion declarations */
 
 /* end of function declarations */
 
@@ -302,6 +306,8 @@ int main(int argc, char *argv[])
 
 	closeDownTcpServer(ListenSocket, ClientSocket);
 
+	cin.get();
+
 	return 0;
 }
 
@@ -436,7 +442,7 @@ string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
 			jsonResult += "{\"pose_keypoints_2d\":[";
 		}
 
-		jsonResult += std::to_string(poseKeyPoints[i]) + delimiter;
+		jsonResult += to_string(poseKeyPoints[i]) + delimiter;
 
 		if (incrementI % numOfPoseKeyPointsPerBody == 0)
 		{
@@ -507,7 +513,7 @@ string getSimplifiedJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outPath)
 {
 	bool isError = false;
-	std::ofstream myFile;
+	ofstream myFile;
 
 	try
 	{
@@ -524,7 +530,7 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outP
 			isError = false;
 		}
 	}
-	catch (const std::exception& e)
+	catch (const exception& e)
 	{
 		op::error(e.what(), __LINE__, __FUNCTION__, __FILE__);
 		isError = true;
@@ -535,78 +541,7 @@ bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outP
 	return !isError;
 }
 
-bool initializeOpenPose(op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
-	string modelDirPath)
-{
-	bool isSuccess = false;
-	
-	try
-	{
-		op::log("Starting OpenPose demo...", op::Priority::High);
-
-
-		// ------------------------- INITIALIZATION -------------------------
-		// Step 1 - Set logging level
-		// - 0 will output all the logging messages
-		// - 255 will output nothing
-		op::check(0 <= FLAGS_logging_level && FLAGS_logging_level <= 255, "Wrong logging_level value.",
-			__LINE__, __FUNCTION__, __FILE__);
-		op::ConfigureLog::setPriorityThreshold((op::Priority)FLAGS_logging_level);
-		op::log("", op::Priority::Low, __LINE__, __FUNCTION__, __FILE__);
-		// Step 2 - Read Google flags (user defined configuration)
-
-		// outputSize
-		const auto outputSize = op::flagsToPoint(FLAGS_output_resolution, "-1x-1");
-
-		// netInputSize
-		const auto netInputSize = op::flagsToPoint(FLAGS_net_resolution, "-1x368");
-		// poseModel
-		const auto poseModel = op::flagsToPoseModel(FLAGS_model_pose);
-		// Check no contradictory flags enabled
-		if (FLAGS_alpha_pose < 0. || FLAGS_alpha_pose > 1.)
-			op::error("Alpha value for blending must be in the range [0,1].", __LINE__, __FUNCTION__, __FILE__);
-		if (FLAGS_scale_gap <= 0. && FLAGS_scale_number > 1)
-			op::error("Incompatible flag configuration: scale_gap must be greater than 0 or scale_number = 1.",
-				__LINE__, __FUNCTION__, __FILE__);
-		// Logging
-		op::log("", op::Priority::Low, __LINE__, __FUNCTION__, __FILE__);
-		// Step 3 - Initialize all required classes
-
-		scaleAndSizeExtractor = new op::ScaleAndSizeExtractor(netInputSize, outputSize, FLAGS_scale_number, FLAGS_scale_gap);
-
-
-		cvMatToOpInput = new op::CvMatToOpInput { poseModel };
-#if _IsRenderImage
-		op::CvMatToOpOutput cvMatToOpOutput;
-#endif
-		//poseExtractorCaffe = new op::PoseExtractorCaffe { poseModel, FLAGS_model_folder, FLAGS_num_gpu_start };
-		poseExtractorCaffe = new op::PoseExtractorCaffe{ poseModel, modelDirPath + "/", FLAGS_num_gpu_start };
-#if _IsRenderImage
-		op::PoseCpuRenderer poseRenderer{ poseModel, (float)FLAGS_render_threshold, !FLAGS_disable_blending,
-			(float)FLAGS_alpha_pose };
-		op::OpOutputToCvMat opOutputToCvMat;
-		string frameTitle = "OpenPose Tutorial - Example 1";
-		op::FrameDisplayer frameDisplayer{ frameTitle, outputSize };
-#endif
-		// Step 4 - Initialize resources on desired thread (in this case single thread, i.e. we init resources here)
-		(*poseExtractorCaffe).initializationOnThread();
-#if _IsRenderImage
-		poseRenderer.initializationOnThread();
-#endif
-
-
-		isSuccess = true;
-	}
-	catch (const std::exception& e)
-	{
-		op::error(e.what(), __LINE__, __FUNCTION__, __FILE__);
-	}
-
-	return isSuccess;
-}
-
-/* Important: wrong use of pointer here */
-string openPoseGetJsonStrFromImg(string inImgPath,
+string openPoseGetJsonStrFromImg(string imgEncodedInStr,
 	op::ScaleAndSizeExtractor *scaleAndSizeExtractor, op::CvMatToOpInput *cvMatToOpInput, op::PoseExtractorCaffe *poseExtractorCaffe,
 	string *jsonPoseResult)
 {
@@ -614,29 +549,30 @@ string openPoseGetJsonStrFromImg(string inImgPath,
 
 	try
 	{
-		const auto timerBegin = std::chrono::high_resolution_clock::now();
+		const auto timerBegin = chrono::high_resolution_clock::now();
 
 
 		// ------------------------- POSE ESTIMATION AND RENDERING -------------------------
 		// Step 1 - Read and load image, error if empty (possibly wrong path)
 		// Alternative: cv::imread(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
 		//cv::Mat inputImage = op::loadImage(FLAGS_image_path, CV_LOAD_IMAGE_COLOR);
-		cv::Mat inputImage = op::loadImage(inImgPath, CV_LOAD_IMAGE_COLOR);
+		//cv::Mat inputImage = op::loadImage(inImgPath, CV_LOAD_IMAGE_COLOR);
+		cv::Mat inputImage = convertBase64ToMat(imgEncodedInStr);
 		if (inputImage.empty())
 		{
 			//op::error("Could not open or find the image: " + FLAGS_image_path, __LINE__, __FUNCTION__, __FILE__);
 			//op::error("Could not open or find the image: " + inImgPath, __LINE__, __FUNCTION__, __FILE__);
 
-			throw std::runtime_error{ "Could not open or find the image: " + inImgPath };
+			throw runtime_error{ "Could not open or find the image: " + imgEncodedInStr };
 		}
 		const op::Point<int> imageSize{ inputImage.cols, inputImage.rows };
 		// Step 2 - Get desired scale sizes
-		std::vector<double> scaleInputToNetInputs;
-		std::vector<op::Point<int>> netInputSizes;
+		vector<double> scaleInputToNetInputs;
+		vector<op::Point<int>> netInputSizes;
 
 		double scaleInputToOutput;
 		op::Point<int> outputResolution;
-		std::tie(scaleInputToNetInputs, netInputSizes, scaleInputToOutput, outputResolution)
+		tie(scaleInputToNetInputs, netInputSizes, scaleInputToOutput, outputResolution)
 			= (*scaleAndSizeExtractor).extract(imageSize);
 
 		// Step 3 - Format input image to OpenPose input and output formats
@@ -659,11 +595,11 @@ string openPoseGetJsonStrFromImg(string inImgPath,
 		frameDisplayer.displayFrame(outputImage, 0); // Alternative: cv::imshow(outputImage) + cv::waitKey(0)
 #endif
 																 // Measuring total time
-		const auto now = std::chrono::high_resolution_clock::now();
-		const auto totalTimeSec = (double)std::chrono::duration_cast<std::chrono::nanoseconds>(now - timerBegin).count()
+		const auto now = chrono::high_resolution_clock::now();
+		const auto totalTimeSec = (double)chrono::duration_cast<chrono::nanoseconds>(now - timerBegin).count()
 			* 1e-9;
 		const auto message = "OpenPose demo successfully finished. Total time: "
-			+ std::to_string(totalTimeSec) + " seconds.";
+			+ to_string(totalTimeSec) + " seconds.";
 		op::log(message, op::Priority::High);
 
 		// return json containing poseKeypoints
@@ -796,9 +732,9 @@ unsigned __stdcall ClientSession(void *data)
 				cout << "Received message: ";
 				cout << recvbufStr << endl;
 
-				string imgFilePath = recvbufStr.substr(0, recvbufStr.find(*tcpMsgDelimiter));
+				string imgEncodedInStr = recvbufStr.substr(0, recvbufStr.find(*tcpMsgDelimiter));
 				string jsonPose;
-				string getPoseErrMsg = openPoseGetJsonStrFromImg(imgFilePath,
+				string getPoseErrMsg = openPoseGetJsonStrFromImg(imgEncodedInStr,
 					scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
 					&jsonPose);
 
@@ -862,3 +798,66 @@ unsigned __stdcall ClientSession(void *data)
 }
 
 /* end of Winsock server implementations */
+
+
+/* base64 conversion implementations */
+// https://stackoverflow.com/questions/32264709/convert-the-base64string-or-byte-array-to-matimage-in-copencv
+
+static inline bool is_base64(unsigned char c) {
+	return (isalnum(c) || (c == '+') || (c == '/'));
+}
+
+static const std::string base64_chars =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	"abcdefghijklmnopqrstuvwxyz"
+	"0123456789+/";
+
+string base64_decode(string const& encoded_string) {
+	int in_len = encoded_string.size();
+	int i = 0;
+	int j = 0;
+	int in_ = 0;
+	unsigned char char_array_4[4], char_array_3[3];
+	string ret;
+
+	while (in_len-- && (encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
+		char_array_4[i++] = encoded_string[in_]; in_++;
+		if (i == 4) {
+			for (i = 0; i < 4; i++)
+				char_array_4[i] = base64_chars.find(char_array_4[i]);
+
+			char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+			char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+			char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+			for (i = 0; (i < 3); i++)
+				ret += char_array_3[i];
+			i = 0;
+		}
+	}
+
+	if (i) {
+		for (j = i; j < 4; j++)
+			char_array_4[j] = 0;
+
+		for (j = 0; j < 4; j++)
+			char_array_4[j] = base64_chars.find(char_array_4[j]);
+
+		char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+		char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+		char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+		for (j = 0; (j < i - 1); j++) ret += char_array_3[j];
+	}
+
+	return ret;
+}
+
+cv::Mat convertBase64ToMat(string encodedStr) {
+	string decodedStr = base64_decode(encodedStr);
+	vector<uchar> data(decodedStr.begin(), decodedStr.end());
+	cv::Mat img = cv::imdecode(data, cv::IMREAD_UNCHANGED);
+	return img;
+}
+
+/* end of base64 conversion implementations */

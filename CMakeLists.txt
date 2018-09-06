@@ -7,7 +7,8 @@
 #     ADD_HERE_YOUR_FILEn.cpp)
 set(USER_CODE_FILES
 	prototype2_openpose.cpp
-	prototype2_openpose_osc.cpp)
+	prototype2_openpose_osc.cpp
+	prototype2_openpose_tcp_with_image.cpp)
 
 foreach(USER_CODE_FILE ${USER_CODE_FILES})
 
