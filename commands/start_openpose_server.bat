@@ -1,0 +1,1 @@
+START /D "D:\Research 0\openpose\build_windows\x64\Release" prototype2_openpose_osc.exe ..\..\..\models [TCP] 27156

@@ -1,0 +1,9 @@
+OpenPoseDemo --image_dir input/ -write_json output/
+
+prototype2_openpose input output archives
+
+START /D D:\OFX\of_v0.10.0_vs2017_release\apps\Prototype2\proto2_combined_JULY17\bin\data prototype2_openpose input output archives
+
+prototype2_openpose D:\OFX\of_v0.10.0_vs2017_release\apps\Prototype2\proto2_combined_JULY17\bin\data\input D:\OFX\of_v0.10.0_vs2017_release\apps\Prototype2\proto2_combined_JULY17\bin\data\output D:\OFX\of_v0.10.0_vs2017_release\apps\Prototype2\proto2_combined_JULY17\bin\data\archives
+
+START /D D:\Research 0\openpose\build_windows\x64\Release prototype2_openpose_osc.exe ..\..\..\models [TCP] 27156
