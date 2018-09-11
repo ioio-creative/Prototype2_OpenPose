@@ -708,74 +708,78 @@ unsigned __stdcall ClientSession(void *data)
 		op::PoseExtractorCaffe *poseExtractorCaffe = ClientSessionData->poseExtractorCaffe;
 		string *tcpMsgDelimiter = ClientSessionData->tcpMsgDelimiter;
 
+		while(true) {
+			string wholeMsg = "";
 
-		// Receive until the peer shuts down the connection
-		do {
-			iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
+			// Receive until the peer shuts down the connection
+			do {
+				iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
 
-			if (iResult > 0) {
-				printf("Bytes received: %d\n", iResult);
+				if (iResult > 0) {
+					printf("Bytes received: %d\n", iResult);
 
-				string recvbufStr = string(recvbuf);
+					string recvbufStr = string(recvbuf);
 
-				// Echo the buffer back to the sender		
-				/*iSendResult = send(ClientSocket, recvbuf, iResult, 0);
-				if (iSendResult == SOCKET_ERROR) {
-					printf("send failed with error: %d\n", WSAGetLastError());
-					closesocket(ClientSocket);
-					WSACleanup();
-					return 1;
+					// Echo the buffer back to the sender		
+					/*iSendResult = send(ClientSocket, recvbuf, iResult, 0);
+					if (iSendResult == SOCKET_ERROR) {
+						printf("send failed with error: %d\n", WSAGetLastError());
+						closesocket(ClientSocket);
+						WSACleanup();
+						return 1;
+					}
+					printf("Bytes sent: %d\n", iSendResult);*/
+
+					std::cout << "Received message: ";
+					std::cout << recvbufStr << endl;
+
+					wholeMsg += recvbufStr;
+
+					if (recvbufStr.find(*tcpMsgDelimiter)) {
+						break;
+					}
 				}
-				printf("Bytes sent: %d\n", iSendResult);*/
-
-
-				cout << "Received message: ";
-				cout << recvbufStr << endl;
-
-				string imgEncodedInStr = recvbufStr.substr(0, recvbufStr.find(*tcpMsgDelimiter));
-				string jsonPose;
-				string getPoseErrMsg = openPoseGetJsonStrFromImg(imgEncodedInStr,
-					scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
-					&jsonPose);
-
-				if (getPoseErrMsg != "")
-				{
-					printf(getPoseErrMsg.c_str());
-					closesocket(ClientSocket);
-					//WSACleanup();
-					return 1;
-				}
-
-
-				jsonPose += *tcpMsgDelimiter;
-
-
-				// send something
-				const char *sendbuf = jsonPose.c_str();
-				int sendBufStrLen = (int)strlen(sendbuf);
-				iSendResult = send(ClientSocket, sendbuf, sendBufStrLen, 0);
-				if (iSendResult == SOCKET_ERROR) {
-					printf("send failed with error: %d\n", WSAGetLastError());
+				else if (iResult == 0)
+					printf("Connection closing...\n");
+				else {
+					printf("recv failed with error: %d\n", WSAGetLastError());
 					closesocket(ClientSocket);
 					//WSACleanup();
 					return 1;
 				}
-
-				cout << "Sent message: ";
-				cout << jsonPose << endl;
-				
+			} while (iResult > 0);
 
 
-			}
-			else if (iResult == 0)
-				printf("Connection closing...\n");
-			else {
-				printf("recv failed with error: %d\n", WSAGetLastError());
+			string imgEncodedInStr = wholeMsg.substr(0, wholeMsg.find(*tcpMsgDelimiter));
+			string jsonPose;
+			string getPoseErrMsg = openPoseGetJsonStrFromImg(imgEncodedInStr,
+				scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
+				&jsonPose);
+
+			if (getPoseErrMsg != "")
+			{
+				printf(getPoseErrMsg.c_str());
 				closesocket(ClientSocket);
 				//WSACleanup();
 				return 1;
 			}
-		} while (iResult > 0);
+
+			jsonPose += *tcpMsgDelimiter;
+
+			// send something
+			const char *sendbuf = jsonPose.c_str();
+			int sendBufStrLen = (int)strlen(sendbuf);
+			iSendResult = send(ClientSocket, sendbuf, sendBufStrLen, 0);
+			if (iSendResult == SOCKET_ERROR) {
+				printf("send failed with error: %d\n", WSAGetLastError());
+				closesocket(ClientSocket);
+				//WSACleanup();
+				return 1;
+			}
+
+			cout << "Sent message: ";
+			cout << jsonPose << endl;
+		}
 
 
 		
