@@ -162,9 +162,10 @@ int main(int argc, char *argv[])
 
 
 	// getting modelDirPath(OpenPose) and portToUse(Networking) from command line arguments
-	int portToUse;
 	string modelDirPath = "";
 	string tcpMsgDelimiter = "";
+	int portToUse;
+	int recvWindBufSize;
 	string usageMsg = "Usage: prototype2_openpose_osc modelDirPath tcpMsgDelimiter portToListen";
 	if (argc != 4)
 	{
@@ -174,7 +175,7 @@ int main(int argc, char *argv[])
 	modelDirPath = string(argv[1]);
 	tcpMsgDelimiter = string(argv[2]);
 	portToUse = stoi(argv[3]);
-	
+
 
 
 	/*bool isSuccess;
@@ -708,83 +709,91 @@ unsigned __stdcall ClientSession(void *data)
 		op::PoseExtractorCaffe *poseExtractorCaffe = ClientSessionData->poseExtractorCaffe;
 		string *tcpMsgDelimiter = ClientSessionData->tcpMsgDelimiter;
 
-		while(true) {
-			string wholeMsg = "";
+		string wholeMsgReceived = "";
 
-			// Receive until the peer shuts down the connection
-			do {
-				iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
+		// Receive until the peer shuts down the connection
+		do {
+			iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
 
-				if (iResult > 0) {
-					printf("Bytes received: %d\n", iResult);
+			if (iResult > 0) {
+				printf("Bytes received: %d\n", iResult);
 
-					string recvbufStr = string(recvbuf);
+				/*
+					!!!Important!!!
+					The following way of setting recvbufStr is much better than
+					string recvbufStr(recvbuf)
+					since recvbuf does not contain terminating null character '\0',
+					the resulting recvbuf will be of length greater than recvbuf if it's set
+					using the way above.
+				*/
+				string recvbufStr(recvbuf, iResult);
+				printf("String length received: %d\n", recvbufStr.length());
 
-					// Echo the buffer back to the sender		
-					/*iSendResult = send(ClientSocket, recvbuf, iResult, 0);
+				// Echo the buffer back to the sender		
+				/*iSendResult = send(ClientSocket, recvbuf, iResult, 0);
+				if (iSendResult == SOCKET_ERROR) {
+					printf("send failed with error: %d\n", WSAGetLastError());
+					closesocket(ClientSocket);
+					WSACleanup();
+					return 1;
+				}
+				printf("Bytes sent: %d\n", iSendResult);*/
+
+				/*cout << "Received message: ";
+				cout << recvbufStr << endl;*/
+
+				wholeMsgReceived += recvbufStr;	
+
+				// delimiter found means whole message is received,
+				// can start processing
+				if (recvbufStr.find(*tcpMsgDelimiter) != string::npos) {
+
+					cout << "String length of data received: " << wholeMsgReceived.length() << endl;
+
+					string imgEncodedInStr = wholeMsgReceived.substr(0, wholeMsgReceived.find(*tcpMsgDelimiter));
+					string jsonPose;
+					string getPoseErrMsg = openPoseGetJsonStrFromImg(imgEncodedInStr,
+						scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
+						&jsonPose);
+
+					if (getPoseErrMsg != "")
+					{
+						printf(getPoseErrMsg.c_str());
+						closesocket(ClientSocket);
+						//WSACleanup();
+						return 1;
+					}
+
+					jsonPose += *tcpMsgDelimiter;
+
+					// send something
+					const char *sendbuf = jsonPose.c_str();
+					int sendBufStrLen = (int)strlen(sendbuf);
+					iSendResult = send(ClientSocket, sendbuf, sendBufStrLen, 0);
 					if (iSendResult == SOCKET_ERROR) {
 						printf("send failed with error: %d\n", WSAGetLastError());
 						closesocket(ClientSocket);
-						WSACleanup();
+						//WSACleanup();
 						return 1;
 					}
-					printf("Bytes sent: %d\n", iSendResult);*/
 
-					std::cout << "Received message: ";
-					std::cout << recvbufStr << endl;
+					cout << "Sent message: ";
+					cout << jsonPose << endl;
 
-					wholeMsg += recvbufStr;
-
-					if (recvbufStr.find(*tcpMsgDelimiter)) {
-						break;
-					}
+					wholeMsgReceived = "";
 				}
-				else if (iResult == 0)
-					printf("Connection closing...\n");
-				else {
-					printf("recv failed with error: %d\n", WSAGetLastError());
-					closesocket(ClientSocket);
-					//WSACleanup();
-					return 1;
-				}
-			} while (iResult > 0);
-
-
-			string imgEncodedInStr = wholeMsg.substr(0, wholeMsg.find(*tcpMsgDelimiter));
-			string jsonPose;
-			string getPoseErrMsg = openPoseGetJsonStrFromImg(imgEncodedInStr,
-				scaleAndSizeExtractor, cvMatToOpInput, poseExtractorCaffe,
-				&jsonPose);
-
-			if (getPoseErrMsg != "")
-			{
-				printf(getPoseErrMsg.c_str());
+			}
+			else if (iResult == 0)
+				printf("Connection closing...\n");
+			else {
+				printf("recv failed with error: %d\n", WSAGetLastError());
 				closesocket(ClientSocket);
 				//WSACleanup();
 				return 1;
 			}
+		} while (iResult > 0);
 
-			jsonPose += *tcpMsgDelimiter;
-
-			// send something
-			const char *sendbuf = jsonPose.c_str();
-			int sendBufStrLen = (int)strlen(sendbuf);
-			iSendResult = send(ClientSocket, sendbuf, sendBufStrLen, 0);
-			if (iSendResult == SOCKET_ERROR) {
-				printf("send failed with error: %d\n", WSAGetLastError());
-				closesocket(ClientSocket);
-				//WSACleanup();
-				return 1;
-			}
-
-			cout << "Sent message: ";
-			cout << jsonPose << endl;
-		}
-
-
-		
-
-						
+				
 
 		// shutdown the connection since we're done
 		iResult = shutdown(ClientSocket, SD_SEND);
@@ -861,6 +870,9 @@ cv::Mat convertBase64ToMat(string encodedStr) {
 	string decodedStr = base64_decode(encodedStr);
 	vector<uchar> data(decodedStr.begin(), decodedStr.end());
 	cv::Mat img = cv::imdecode(data, cv::IMREAD_UNCHANGED);
+	
+	//cv::imwrite("test.jpg", img);
+	
 	return img;
 }
 
