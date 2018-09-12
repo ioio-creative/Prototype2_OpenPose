@@ -62,7 +62,8 @@ using namespace std;
 // #pragma comment (lib, "Mswsock.lib")
 
 //#define DEFAULT_BUFLEN 512
-#define DEFAULT_BUFLEN 65536
+//#define DEFAULT_BUFLEN 65536
+#define DEFAULT_BUFLEN 524288
 //#define DEFAULT_PORT "27156"
 
 /* end of Winsock server dependencies */
