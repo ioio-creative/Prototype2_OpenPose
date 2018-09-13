@@ -63,8 +63,6 @@ using namespace std;
 
 #define DEFAULT_BUFLEN 512
 //#define DEFAULT_PORT "27156"
-#define HOST_NAME_TO_USE "localhost"
-//#define MY_HOST_NAME "127.0.0.1"
 
 /* end of Winsock server dependencies */
 
@@ -142,7 +140,7 @@ struct clientSessionData
 /* end of openpose declarations */
 
 /* Winsock server declarations */
-int initializeTcpServer(string hostNameToUse, int port, SOCKET *listenSocket);
+int initializeTcpServer(int port, SOCKET *listenSocket);
 void closeDownTcpServer(SOCKET ListenSocket, SOCKET ClientSocket);
 unsigned __stdcall ClientSession(void *data);
 /* end of Winsock server declarations */
@@ -253,7 +251,7 @@ int main(int argc, char *argv[])
 	SOCKET ClientSocket = INVALID_SOCKET;
 
 	
-	iResult = initializeTcpServer(HOST_NAME_TO_USE, portToUse, &ListenSocket);
+	iResult = initializeTcpServer(portToUse, &ListenSocket);
 	if (iResult != 0)
 	{
 		return iResult;
@@ -682,7 +680,7 @@ string openPoseGetJsonStrFromImg(string inImgPath,
 
 /* Winsock server implementations */
 
-int initializeTcpServer(string hostNameToUse, int port, SOCKET *ListenSocket)
+int initializeTcpServer(int port, SOCKET *ListenSocket)
 {
 	// Complete Winsock Server Code
 	// https://docs.microsoft.com/en-us/windows/desktop/winsock/complete-server-code#winsock-server-source-code
@@ -706,8 +704,7 @@ int initializeTcpServer(string hostNameToUse, int port, SOCKET *ListenSocket)
 	hints.ai_flags = AI_PASSIVE;
 
 	// Resolve the server address and port	
-	//iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);
-	iResult = getaddrinfo(hostNameToUse.c_str(), (to_string(port)).c_str(), &hints, &result);
+	iResult = getaddrinfo(NULL, DEFAULT_PORT, &hints, &result);	
 	if (iResult != 0) {
 		printf("getaddrinfo failed with error: %d\n", iResult);
 		WSACleanup();
