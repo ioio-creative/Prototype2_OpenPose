@@ -24,7 +24,7 @@ https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/doc/demo_ov
 One improvement to the code can be using network communication (e.g. OSC) to communicate the input and output data to / from a caller program. Currently, this code uses the OS file system as a medium to communicate input / output and the while-true loop will hold up the computing resources of one thread.
 
 This code will be used with the Prototype2 project by the Research team of IOIO.
-https://github.com/ioio-creative/Prototype2
+https://github.com/ioio-creative/Prototype2_Snapshot
 
 
 
