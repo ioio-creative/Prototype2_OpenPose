@@ -120,7 +120,6 @@ string getEarliestCreatedFileNameInDirectory(const string& directoryName);
 /* end of file IO declarations */
 
 /* openpose declarations */
-string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 string getSimplifiedJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints);
 bool outputPoseKeypointsToJson(op::Array<float> poseKeyPoints, const string outPath);
 /* Important: wrong use of pointer here */
@@ -391,97 +390,55 @@ string getEarliestCreatedFileNameInDirectory(const string& directoryName)
 // https://github.com/CMU-Perceptual-Computing-Lab/openpose/blob/master/doc/output.md
 // Result for BODY_25 (25 body parts consisting of COCO + foot)
  const map<unsigned int, string> POSE_BODY_25_BODY_PARTS {
-     {0,  "Nose"},
-     {1,  "Neck"},
-     {2,  "RShoulder"},
-     {3,  "RElbow"},
-     {4,  "RWrist"},
-     {5,  "LShoulder"},
-     {6,  "LElbow"},
-     {7,  "LWrist"},
-     {8,  "MidHip"},
-     {9,  "RHip"},
-     {10, "RKnee"},
-     {11, "RAnkle"},
-     {12, "LHip"},
-     {13, "LKnee"},
-     {14, "LAnkle"},
-     {15, "REye"},
-     {16, "LEye"},
-     {17, "REar"},
-     {18, "LEar"},
-     {19, "LBigToe"},
-     {20, "LSmallToe"},
-     {21, "LHeel"},
-     {22, "RBigToe"},
-     {23, "RSmallToe"},
-     {24, "RHeel"},
-     {25, "Background"}
- };
+    {0,  "Nose"},
+    {1,  "Neck"},
+    {2,  "RShoulder"},
+    {3,  "RElbow"},
+    {4,  "RWrist"},
+    {5,  "LShoulder"},
+    {6,  "LElbow"},
+    {7,  "LWrist"},
+    {8,  "MidHip"},
+    {9,  "RHip"},
+    {10, "RKnee"},
+    {11, "RAnkle"},
+    {12, "LHip"},
+    {13, "LKnee"},
+    {14, "LAnkle"},
+    {15, "REye"},
+    {16, "LEye"},
+    {17, "REar"},
+    {18, "LEar"},
+    {19, "LBigToe"},
+    {20, "LSmallToe"},
+    {21, "LHeel"},
+    {22, "RBigToe"},
+    {23, "RSmallToe"},
+    {24, "RHeel"},
+    {25, "Background"}
+};
 
-string getJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
-{
-	string jsonResult = "{\"version\":1.2,\"people\":[";
-	const string delimiter = ",";
-	const int numOfPoseKeyPointsPerBody = 25 * 3;
-	int arrayLength = poseKeyPoints.getVolume();
-	for (int i = 0; i < arrayLength; i++)
-	{
-		int incrementI = (i + 1);
-
-		if (incrementI % numOfPoseKeyPointsPerBody == 1)
-		{
-			jsonResult += "{\"pose_keypoints_2d\":[";
-		}
-
-		jsonResult += std::to_string(poseKeyPoints[i]) + delimiter;
-
-		if (incrementI % numOfPoseKeyPointsPerBody == 0)
-		{
-			jsonResult = jsonResult.substr(0, jsonResult.length() - 1);
-			jsonResult += "],\"face_keypoints_2d\":[],";
-			jsonResult += "\"hand_left_keypoints_2d\" : [],";
-			jsonResult += "\"hand_right_keypoints_2d\" : [],";
-			jsonResult += "\"pose_keypoints_3d\" : [],";
-			jsonResult += "\"face_keypoints_3d\" : [],";
-			jsonResult += "\"hand_left_keypoints_3d\" : [],",
-				jsonResult += "\"hand_right_keypoints_3d\" : []},";
-		}
-	}
-
-	if (jsonResult != "")
-	{
-		jsonResult = jsonResult.substr(0, jsonResult.length() - 1);
-		jsonResult += "]}";
-	}
-
-	return jsonResult;
-}
-
-string getSimplifiedJsonFromPoseKeyPoints(op::Array<float> poseKeyPoints)
+string getSimplifiedJsonFromPoseKeyPoints(op::Array<float> poseKeypoints)
 {
 	string jsonResult = "{\"people\":[";
-	const int numOfNumbersPerPoseKeyPoint = 3;
-	const int numOfPoseKeyPointsPerBody = 25;
-	const int numOfNumbersPerBody = numOfNumbersPerPoseKeyPoint * numOfPoseKeyPointsPerBody;
-	int arrayLength = poseKeyPoints.getVolume();
 
-	int numOfBodies = arrayLength / numOfNumbersPerBody;
-
-	for (int i = 0; i < numOfBodies; i++) {
+	for (auto person = 0; person < poseKeypoints.getSize(0); person++)
+	{
 		// start of body
 		jsonResult += "{";
 
-		for (int j = 0; j < numOfPoseKeyPointsPerBody; j++) {
+		for (auto bodyPart = 0; bodyPart < poseKeypoints.getSize(1); bodyPart++)
+		{
 			// start of body part
-			jsonResult += "\"" + POSE_BODY_25_BODY_PARTS.at(j) +
+			jsonResult += "\"" + POSE_BODY_25_BODY_PARTS.at(bodyPart) +
 				"\":[";
 
-			// numOfNumbersPerPoseKeyPoint - 1 because we ignore the 3rd coordinate for each pose key point
-			for (int k = 0; k < numOfNumbersPerPoseKeyPoint - 1; k++) {
+			// poseKeypoints.getSize(2) - 1 because we ignore the 3rd coordinate for each pose key point, which is the confidence score
+			for (auto xyscore = 0; xyscore < poseKeypoints.getSize(2) - 1; xyscore++)
+			{
 				//cout << i * numOfPoseKeyPointsPerBody + j * numOfNumbersPerPoseKeyPoint + k << endl;
-				jsonResult += to_string(poseKeyPoints[i * numOfPoseKeyPointsPerBody + j * numOfNumbersPerPoseKeyPoint + k]) + ",";
-			}			
+				jsonResult += to_string(poseKeypoints[{person, bodyPart, xyscore}]) + ",";
+			}
 
 			// end of body part
 			jsonResult = jsonResult.substr(0, jsonResult.length() - 1);
